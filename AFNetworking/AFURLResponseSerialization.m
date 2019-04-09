@@ -154,27 +154,6 @@ id AFJSONObjectByRemovingKeysWithNullValues(id JSONObject, NSJSONReadingOptions 
     if (error && !responseIsValid) {
         *error = validationError;
     }
-    
-    // save jSession from response header - djpark 2018.01.04
-    NSArray* newCookies = [[NSHTTPCookieStorage sharedHTTPCookieStorage] cookiesForURL:response.URL];
-    //[[MGLogger instance]logger:__L_LOG_LEVEL_DEBUG: [NSString stringWithFormat:@"jSession newCookies: %@", newCookies]: __FILE__: __LINE__];
-
-    if(newCookies != nil)
-    {
-        for(NSHTTPCookie *cookie in newCookies)
-        {
-            //[[MGLogger instance]logger:__L_LOG_LEVEL_DEBUG: [NSString stringWithFormat:@"jSession __________Url : %@", [response.URL absoluteString]]: __FILE__: __LINE__];
-
-            if ([[response.URL absoluteString] rangeOfString:@"/login/"].location != NSNotFound) {
-                if ([@"JSESSIONID" isEqualToString:[cookie name]]
-                    && ![[cookie value] isEqualToString:[[MGSharedModel sharedInstance] getJSessionId]]) {
-                    //[[MGLogger instance]logger:__L_LOG_LEVEL_DEBUG: [NSString stringWithFormat:@"jSession __________Cookie : %@ = %@", [cookie name], [cookie value]]: __FILE__: __LINE__];
-                    [[MGSharedModel sharedInstance] setJSessionId:[cookie value]];
-                }
-            }
-        }
-    }
-    [[NSHTTPCookieStorage sharedHTTPCookieStorage] setCookies:newCookies forURL:response.URL mainDocumentURL:nil];
 
     return responseIsValid;
 }

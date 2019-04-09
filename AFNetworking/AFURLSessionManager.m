@@ -21,11 +21,6 @@
 
 #import "AFURLSessionManager.h"
 #import <objc/runtime.h>
-#import "OGGlobalConfig.h"
-#import "AppChannelBinding.h"
-#import "BuildConfig.h"
-#import "MGCommonUtil.h"
-
 
 #ifndef NSFoundationVersionNumber_iOS_8_0
 #define NSFoundationVersionNumber_With_Fixed_5871104061079552_bug 1140.11
@@ -1021,134 +1016,10 @@ didReceiveChallenge:(NSURLAuthenticationChallenge *)challenge
             disposition = NSURLSessionAuthChallengePerformDefaultHandling;
         }
     }
-    
-    //    NSArray *trustedHosts = @[@"fido.raonsecure.com", @"10.0.0.99", @"kaf.dayside.co.kr", @"112.216.93.139", @"tb.fido.olleh.com", @"221.148.247.5", @"https://mguarddev.raonsecure.co.kr:8802"];
-    //    if ([challenge.protectionSpace.authenticationMethod isEqualToString:NSURLAuthenticationMethodServerTrust])
-    //        if ([trustedHosts containsObject:challenge.protectionSpace.host])
-    //            [challenge.sender useCredential:[NSURLCredential credentialForTrust:challenge.protectionSpace.serverTrust] forAuthenticationChallenge:challenge];
-    
-    
-    //    NSURLProtectionSpace *protectionSpace = challenge.protectionSpace;
-    
-    SecTrustRef trust = [challenge.protectionSpace serverTrust];
-    SecCertificateRef certificate = SecTrustGetCertificateAtIndex(trust, 0);
-    
-    CFDataRef certData = SecCertificateCopyData(certificate);
-    AppChannelBinding *channelBinding = [[OGGlobalConfig sharedInstance] channelBinding];
-    //    [[MGLogger instance]logger:__L_LOG_LEVEL_DEBUG:[NSString stringWithFormat:@"ssl certData: %@", certData]: __FILE__: __LINE__];
-    
-    //__USE_VALIDATION_CERTIFICATE__
-    
-    //Subject Summary
-    CFStringRef summaryRef = SecCertificateCopySubjectSummary(certificate);
-    if (summaryRef == NULL) {
-        summaryRef = CFRetain(summaryRef);
-    }
-    else {
-        NSString *summaryCN = [NSString stringWithFormat:@"%@", summaryRef];
-//        [[MGLogger instance]logger:__L_LOG_LEVEL_DEBUG:[NSString stringWithFormat:@"__summary summaryCN : %@", summaryCN]: __FILE__: __LINE__];
-//        [[MGLogger instance]logger:__L_LOG_LEVEL_DEBUG:[NSString stringWithFormat:@"__summaryRef : %@", [[MGSharedModel sharedInstance] getCertificateCommonName]]: __FILE__: __LINE__];
-//        [[MGLogger instance]logger:__L_LOG_LEVEL_DEBUG:[NSString stringWithFormat:@"__summary DEFAULT_CN : %@", DEFAULT_CN]: __FILE__: __LINE__];
-        if ([MGSharedModel isUseValidationCertificate]) {
-            // 최초 CN값이 null이거나 인증서 정보가 다를때
-            if ([[MGSharedModel sharedInstance] getCertificateCommonName] == nil
-                || ![[[MGSharedModel sharedInstance] getCertificateCommonName] isEqualToString:summaryCN]) {
-                [[MGSharedModel sharedInstance] setCertificateCommonName:summaryCN];
-            }
-            
-            if (![DEFAULT_CN isEqualToString:[[MGSharedModel sharedInstance] getCertificateCommonName]]) {
-        
-                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                    [MGCommonUtil MGUIPopup1Controller:@"유효한 인증서가 아닙니다." withCompletionBlock:^(MG_BUTTON_INDEX index) {
-                        if (index == MG_BUTTON_INDEX_OK) {
-                            exit(0);
-                        }
-                    }];
-                });
-            } else {
-                //Debug 모드에서는 서버 SSL 인증서 설정안하도록 함.
-                if ([MGSharedModel isDebugMode]) {
-                } else {
-                    if (certData != nil) {
-                        [channelBinding setTLSServerCertificate:(__bridge NSData*)certData];
-                    }
-                }
-                [challenge.sender continueWithoutCredentialForAuthenticationChallenge:challenge];
-                if (completionHandler) {
-                    completionHandler(disposition, credential);
-                }
-            }
-        } else {
-            //Debug 모드에서는 서버 SSL 인증서 설정안하도록 함.
-            if ([MGSharedModel isDebugMode]) {
-            } else {
-                if (certData != nil) {
-                    [channelBinding setTLSServerCertificate:(__bridge NSData*)certData];
-                }
-            }
-            [challenge.sender continueWithoutCredentialForAuthenticationChallenge:challenge];
-            if (completionHandler) {
-                completionHandler(disposition, credential);
-            }
-        }
-    }
-    
-    /*
-     //Common Name
-     CFStringRef commonNameRef;
-     OSStatus status;
-     if ((status=SecCertificateCopyCommonName(certificate, &commonNameRef)) != errSecSuccess) {
-     NSLog(@"Could not extract name from cert");
-     };
-     NSLog(@"commonNameRef : %@", commonNameRef);
-     
-     
-     //Email Address
-     CFStringRef emailAddressRef;
-     if ((status=SecCertificateCopyCommonName(certificate, &emailAddressRef)) != errSecSuccess) {
-     NSLog(@"Could not extract cert");
-     };
-     NSLog(@"emailAddressRef : %@", emailAddressRef);
-     
-     
-     //Serial Number
-     CFDataRef certSerialData = SecCertificateCopySerialNumber(certificate);
-     [channelBinding setTLSServerCertificate:(__bridge NSData*)certSerialData];
-     */
-    
-#if 0
-    //Debug 모드에서는 서버 SSL 인증서 설정안하도록 함.
-    if ([[MGSharedModel sharedInstance] isDebugMode]) {
-    } else {
-        if (certData != nil) {
-            [channelBinding setTLSServerCertificate:(__bridge NSData*)certData];
-        }
-    }
-    
-    
-    [challenge.sender continueWithoutCredentialForAuthenticationChallenge:challenge];
-    
-    //    NSData *remoteCertificateData = CFBridgingRelease(SecCertificateCopyData(certificate));
-    //    NSString *cerPath = [[NSBundle mainBundle] pathForResource:@"myCertName" ofType:@"cer"];
-    //    NSData *localCertData = [NSData dataWithContentsOfFile:cerPath];
-    
-    //    if ([remoteCertificateData isEqualToData:localCertData])
-    //    {
-    //        NSURLCredential *credential = [NSURLCredential credentialForTrust:serverTrust];
-    //        [[challenge sender] useCredential:credential forAuthenticationChallenge:challenge];
-    //        completionHandler(NSURLSessionAuthChallengeUseCredential, nil);
-    //    }
-    //    else
-    //    {
-    //    NSURLCredential *credential = [NSURLCredential credentialForTrust:trust];
-    //    [[challenge sender] cancelAuthenticationChallenge:challenge];
-    //    completionHandler(NSURLSessionAuthChallengeRejectProtectionSpace, credential);
-    
-    
+
     if (completionHandler) {
         completionHandler(disposition, credential);
     }
-#endif
 }
 
 #pragma mark - NSURLSessionTaskDelegate

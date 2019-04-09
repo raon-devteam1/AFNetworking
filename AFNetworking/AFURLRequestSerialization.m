@@ -26,7 +26,7 @@
 #else
 #import <CoreServices/CoreServices.h>
 #endif
-#define BOUNDARY    @"dkjsei40f9844-------djs8dviw--4-s-df-"
+
 NSString * const AFURLRequestSerializationErrorDomain = @"com.alamofire.error.serialization.request";
 NSString * const AFNetworkingOperationFailingURLRequestErrorKey = @"com.alamofire.serialization.request.error.response";
 
@@ -189,12 +189,6 @@ static void *AFHTTPRequestSerializerObserverContext = &AFHTTPRequestSerializerOb
 @property (readwrite, nonatomic, strong) dispatch_queue_t requestHeaderModificationQueue;
 @property (readwrite, nonatomic, assign) AFHTTPRequestQueryStringSerializationStyle queryStringSerializationStyle;
 @property (readwrite, nonatomic, copy) AFQueryStringSerializationBlock queryStringSerialization;
-
-@property (retain) NSMutableArray *fileData;
-@property (retain) NSMutableArray *postData;
-@property (retain) NSMutableData *postBody;
-
-
 @end
 
 @implementation AFHTTPRequestSerializer
@@ -208,7 +202,7 @@ static void *AFHTTPRequestSerializerObserverContext = &AFHTTPRequestSerializerOb
     if (!self) {
         return nil;
     }
-    
+
     self.stringEncoding = NSUTF8StringEncoding;
 
     self.mutableHTTPRequestHeaders = [NSMutableDictionary dictionary];
@@ -217,21 +211,12 @@ static void *AFHTTPRequestSerializerObserverContext = &AFHTTPRequestSerializerOb
     // Accept-Language HTTP Header; see http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.4
     NSMutableArray *acceptLanguagesComponents = [NSMutableArray array];
     [[NSLocale preferredLanguages] enumerateObjectsUsingBlock:^(id obj, NSUInteger idx, BOOL *stop) {
-        /*
         float q = 1.0f - (idx * 0.1f);
         [acceptLanguagesComponents addObject:[NSString stringWithFormat:@"%@;q=%0.1g", obj, q]];
         *stop = q <= 0.5f;
-         */
-        // 서버에서 받아오는 문구 처리를 위한 Request Header 정보 수정(Accept-Language) - ONEGUARD-127
-        if (idx == 0)
-            [acceptLanguagesComponents addObject:[NSString stringWithFormat:@"%@", obj]];
     }];
     [self setValue:[acceptLanguagesComponents componentsJoinedByString:@", "] forHTTPHeaderField:@"Accept-Language"];
-    
-    // request header add value - djpark 2018.01.04
-    [self setValue:@"application/json" forHTTPHeaderField:@"Accept"];
-    [self setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
-    
+
     NSString *userAgent = nil;
 #if TARGET_OS_IOS
     // User-Agent Header; see http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.43
@@ -402,11 +387,10 @@ forHTTPHeaderField:(NSString *)field
     NSParameterAssert(method);
     NSParameterAssert(![method isEqualToString:@"GET"] && ![method isEqualToString:@"HEAD"]);
 
-    NSMutableURLRequest *mutableRequest = [self requestWithMethod:method URLString:URLString parameters:parameters error:error];
+    NSMutableURLRequest *mutableRequest = [self requestWithMethod:method URLString:URLString parameters:nil error:error];
 
     __block AFStreamingMultipartFormData *formData = [[AFStreamingMultipartFormData alloc] initWithURLRequest:mutableRequest stringEncoding:NSUTF8StringEncoding];
 
-    
     if (parameters) {
         for (AFQueryStringPair *pair in AFQueryStringPairsFromDictionary(parameters)) {
             NSData *data = nil;
@@ -533,29 +517,10 @@ forHTTPHeaderField:(NSString *)field
             query = @"";
         }
         if (![mutableRequest valueForHTTPHeaderField:@"Content-Type"]) {
-//            [mutableRequest setValue:@"application/x-www-form-urlencoded" forHTTPHeaderField:@"Content-Type"];
-            [mutableRequest setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
+            [mutableRequest setValue:@"application/x-www-form-urlencoded" forHTTPHeaderField:@"Content-Type"];
         }
-        
-        
-        if (![NSJSONSerialization isValidJSONObject:parameters]) {
-            if (error) {
-                NSDictionary *userInfo = @{NSLocalizedFailureReasonErrorKey: NSLocalizedStringFromTable(@"The 'parameters' argument is not valid JSON.", @"AFNetworking", nil)};
-                *error = [[NSError alloc] initWithDomain:AFURLRequestSerializationErrorDomain code:NSURLErrorCannotDecodeContentData userInfo:userInfo];
-            }
-            return nil;
-        }
-        
-        NSData *jsonData = [NSJSONSerialization dataWithJSONObject:parameters options:
-                            NSJSONWritingPrettyPrinted error:error];
-        
-        if (!jsonData) {
-            return nil;
-        }
-        [mutableRequest setHTTPBody:jsonData];
-//        [mutableRequest setHTTPBody:[query dataUsingEncoding:self.stringEncoding]];
+        [mutableRequest setHTTPBody:[query dataUsingEncoding:self.stringEncoding]];
     }
-    
 
     return mutableRequest;
 }
@@ -694,16 +659,10 @@ NSTimeInterval const kAFUploadStream3GSuggestedDelay = 0.2;
 @property (readwrite, nonatomic, assign) NSStringEncoding stringEncoding;
 @property (readwrite, nonatomic, copy) NSString *boundary;
 @property (readwrite, nonatomic, strong) AFMultipartBodyStream *bodyStream;
-
-@property (retain) NSMutableArray *fileData;
-@property (retain) NSMutableArray *postData;
-@property (retain) NSMutableData *postBody;
 @end
 
 @implementation AFStreamingMultipartFormData
-@synthesize fileData         = _fileData;
-@synthesize postData         = _postData;
-@synthesize postBody         = _postBody;
+
 - (instancetype)initWithURLRequest:(NSMutableURLRequest *)urlRequest
                     stringEncoding:(NSStringEncoding)encoding
 {
@@ -714,11 +673,8 @@ NSTimeInterval const kAFUploadStream3GSuggestedDelay = 0.2;
 
     self.request = urlRequest;
     self.stringEncoding = encoding;
-    // changed boundary - djpark 2018.01.04
-//    self.boundary = AFCreateMultipartFormBoundary();
-    self.boundary = BOUNDARY;// AFCreateMultipartFormBoundary();
+    self.boundary = AFCreateMultipartFormBoundary();
     self.bodyStream = [[AFMultipartBodyStream alloc] initWithStringEncoding:encoding];
-    
 
     return self;
 }
@@ -740,72 +696,7 @@ NSTimeInterval const kAFUploadStream3GSuggestedDelay = 0.2;
 
     return [self appendPartWithFileURL:fileURL name:name fileName:fileName mimeType:mimeType error:error];
 }
-- (void)appendPostString:(NSString*)string {
-    //[[MGLogger instance]logger:__L_LOG_LEVEL_DEBUG: [NSString stringWithFormat:@"!----  %@",string]: __FILE__: __LINE__];
-    [self appendPostData:[string dataUsingEncoding:NSUTF8StringEncoding]];
-}
 
-- (void)setupPostBody {
-    if(![self postBody])
-        self.postBody = [NSMutableData data];
-}
-
-- (void)appendPostData:(NSData*)data {
-    [self setupPostBody];
-    
-    if([data length] <= 0)
-        return;
-    
-    [[self postBody] appendData:data];
-}
-
-
-- (void)setPostValue:(NSString*)value forKey:(NSString*)key {
-    for(NSUInteger i = 0; i < [[self postData] count]; i++)
-    {
-        NSDictionary *v = [[self postData] objectAtIndex:i];
-        if([[v objectForKey:@"key"] isEqualToString:key])
-        {
-            [[self postData] removeObjectAtIndex:i];
-            i--;
-        }
-    }
-    
-    [self addPostValue:value forKey:key];
-}
-
-- (void)addPostValue:(NSString*)value forKey:(NSString*)key {
-    if(![self postData])
-        [self setPostData:[NSMutableArray array]];
-    
-    [[self postData] addObject:[NSDictionary dictionaryWithObjectsAndKeys:[value description], @"value", key, @"key", nil]];
-}
-
-- (void)setFile:(NSString*)filePath forKey:(NSString*)key {
-    if(![self fileData])
-        [self setFileData:[NSMutableArray array]];
-    
-    for(NSUInteger i = 0; i < [[self fileData] count]; i++)
-    {
-        NSDictionary *val = [[self fileData] objectAtIndex:i];
-        if([[val objectForKey:@"key"] isEqualToString:key])
-        {
-            [[self fileData] removeObjectAtIndex:i];
-            i--;
-        }
-    }
-    
-    [self addFile:filePath forKey:key];
-}
-
-- (void)addFile:(NSString*)filePath forKey:(NSString*)key {
-    NSString *fileName = [filePath lastPathComponent];
-    NSString *contentType = @"application/octet-stream";
-    
-    NSDictionary *fileInfo = [NSDictionary dictionaryWithObjectsAndKeys:filePath, @"data", contentType, @"contentType", fileName, @"fileName", key, @"key", nil];
-    
-    [[self fileData] addObject:fileInfo];
-}
 - (BOOL)appendPartWithFileURL:(NSURL *)fileURL
                          name:(NSString *)name
                      fileName:(NSString *)fileName
@@ -839,20 +730,9 @@ NSTimeInterval const kAFUploadStream3GSuggestedDelay = 0.2;
     }
 
     NSMutableDictionary *mutableHeaders = [NSMutableDictionary dictionary];
-//    [mutableHeaders setValue:[NSString stringWithFormat:@"form-data; name=\"%@\"; filename=\"%@\"", name, fileName] forKey:@"Content-Disposition"];
-//    [mutableHeaders setValue:mimeType forKey:@"Content-Type"];
-    [mutableHeaders setValue:[NSString stringWithFormat:@"multipart/form-data; boundary=%@", self.boundary] forKey:@"Content-Type"];
+    [mutableHeaders setValue:[NSString stringWithFormat:@"form-data; name=\"%@\"; filename=\"%@\"", name, fileName] forKey:@"Content-Disposition"];
+    [mutableHeaders setValue:mimeType forKey:@"Content-Type"];
 
-    
-    
-/*
- bodyPart.headers : {
- "Content-Type" = "multipart/form-data; boundary=dkjsei40f9844-------djs8dviw--4-s-df-";
- }
- 
- bodyPart.boundary : dkjsei40f9844-------djs8dviw--4-s-df-
- bodyPart.body : file:///var/mobile/Containers/Data/Application/5713F6DD-58D1-4E0B-8224-5CDD634F4788/Documents/EncryptABooks.enc
- */
     AFHTTPBodyPart *bodyPart = [[AFHTTPBodyPart alloc] init];
     bodyPart.stringEncoding = self.stringEncoding;
     bodyPart.headers = mutableHeaders;
@@ -860,6 +740,7 @@ NSTimeInterval const kAFUploadStream3GSuggestedDelay = 0.2;
     bodyPart.body = fileURL;
     bodyPart.bodyContentLength = [fileAttributes[NSFileSize] unsignedLongLongValue];
     [self.bodyStream appendHTTPBodyPart:bodyPart];
+
     return YES;
 }
 
@@ -1372,20 +1253,6 @@ typedef enum {
             [mutableRequest setValue:value forHTTPHeaderField:field];
         }
     }];
-    
-    // AFNetworikng put jSession value in request header - djpark 2018.01.04
-    if ([[MGSharedModel sharedInstance] getJSessionId] != nil && [request.URL.absoluteString rangeOfString:@"/device/"].location != NSNotFound) {
-//        [[MGLogger instance]logger:__L_LOG_LEVEL_DEBUG: [NSString stringWithFormat:@"jSession [[MGSharedModel sharedInstance] getJSessionId]: %@", [[MGSharedModel sharedInstance] getJSessionId]]: __FILE__: __LINE__];
-
-        NSMutableDictionary *cookieProperties = [NSMutableDictionary dictionary];
-        [cookieProperties setObject:[[MGSharedModel sharedInstance] getJSessionId] forKey:NSHTTPCookieValue];
-        [cookieProperties setValue:@"mguarddev.raonsecure.co.kr" forKey:NSHTTPCookieDomain];
-        [cookieProperties setValue:[NSDate dateWithTimeIntervalSinceNow:60*60] forKey:NSHTTPCookieExpires];
-        [cookieProperties setObject:@"/" forKey:NSHTTPCookiePath];
-        [cookieProperties setObject:@"0" forKey:NSHTTPCookieVersion];
-        NSHTTPCookie *cookie = [NSHTTPCookie cookieWithProperties:cookieProperties];
-        [[NSHTTPCookieStorage sharedHTTPCookieStorage] setCookie:cookie];
-    }
 
     if (parameters) {
         if (![mutableRequest valueForHTTPHeaderField:@"Content-Type"]) {
